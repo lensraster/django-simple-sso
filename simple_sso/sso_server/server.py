@@ -13,14 +13,18 @@ import urllib
 from webservices.models import Provider
 from webservices.sync import provider_for_django
 
+import logging
+logger = logging.getLogger('heroku')
 
 class BaseProvider(Provider):
     max_age = 5
 
     def __init__(self, server):
+        logger.debug('PROFILING')
         self.server = server
 
     def get_private_key(self, public_key):
+        logger.debug('PROFILING')
         try:
             self.consumer = Consumer.objects.get(public_key=public_key)
         except Consumer.DoesNotExist:
@@ -30,6 +34,7 @@ class BaseProvider(Provider):
 
 class RequestTokenProvider(BaseProvider):
     def provide(self, data):
+        logger.debug('PROFILING')
         redirect_to = data['redirect_to']
         token = Token.objects.create(consumer=self.consumer, redirect_to=redirect_to)
         return {'request_token': token.request_token}
@@ -48,6 +53,7 @@ class AuthorizeView(View):
     server = None
 
     def get(self, request):
+        logger.debug('PROFILING')
         request_token = request.GET.get('token', None)
         if not request_token:
             return self.missing_token_argument()
@@ -64,15 +70,18 @@ class AuthorizeView(View):
             return self.handle_unauthenticated_user()
 
     def missing_token_argument(self):
+        logger.debug('PROFILING')
         return HttpResponseBadRequest('Token missing')
 
     def token_not_found(self):
+        logger.debug('PROFILING')
         return HttpResponseForbidden('Token not found')
 
     def token_timeout(self):
         return HttpResponseForbidden('Token timed out')
 
     def check_token_timeout(self):
+        logger.debug('PROFILING')
         delta = datetime.datetime.now() - self.token.timestamp.replace(tzinfo=None)
         if delta > self.server.token_timeout:
             self.token.delete()
@@ -81,20 +90,24 @@ class AuthorizeView(View):
             return True
 
     def handle_authenticated_user(self):
+        logger.debug('PROFILING')
         if self.server.has_access(self.request.user, self.token.consumer):
             return self.success()
         else:
             return self.access_denied()
 
     def handle_unauthenticated_user(self):
+        logger.debug('PROFILING')
         next = '%s?%s' % (self.request.path, urllib.urlencode([('token', self.token.request_token)]))
         url = '%s?%s' % (reverse(self.server.auth_view_name), urllib.urlencode([('next', next)]))
         return HttpResponseRedirect(url)
 
     def access_denied(self):
+        logger.debug('PROFILING')
         return HttpResponseForbidden("Access denied")
 
     def success(self):
+        logger.debug('PROFILING')
         self.token.user = self.request.user
         self.token.save()
         serializer = URLSafeTimedSerializer(self.token.consumer.private_key)
@@ -107,6 +120,7 @@ class AuthorizeView(View):
 
 class VerificationProvider(BaseProvider, AuthorizeView):
     def provide(self, data):
+        logger.debug('PROFILING')
         token = data['access_token']
         try:
             self.token = Token.objects.select_related('user').get(access_token=token, consumer=self.consumer)
@@ -121,6 +135,7 @@ class VerificationProvider(BaseProvider, AuthorizeView):
             self.token.user, self.consumer, extra_data=extra_data)
 
     def token_not_bound(self):
+        logger.debug('PROFILING')
         return HttpResponseForbidden("Invalid token")
 
 
@@ -129,6 +144,7 @@ class ConsumerAdmin(ModelAdmin):
 
 
 class Server(object):
+    logger.debug('PROFILING')
     request_token_provider = RequestTokenProvider
     authorize_view = AuthorizeView
     verification_provider = VerificationProvider
@@ -137,11 +153,13 @@ class Server(object):
     auth_view_name = 'django.contrib.auth.views.login'
 
     def __init__(self, **kwargs):
+        logger.debug('PROFILING')
         for key, value in kwargs.items():
             setattr(self, key, value)
         self.register_admin()
 
     def register_admin(self):
+        logger.debug('PROFILING')
         admin.site.register(Consumer, self.client_admin)
 
     def has_access(self, user, consumer):
@@ -151,6 +169,7 @@ class Server(object):
         raise NotImplementedError()
 
     def get_user_data(self, user, consumer, extra_data=None):
+        logger.debug('PROFILING')
         user_data = {
             'username': user.username,
             'email': user.email,
@@ -166,6 +185,7 @@ class Server(object):
         return user_data
 
     def get_urls(self):
+        logger.debug('PROFILING')
         return patterns('',
             url(r'^request-token/$', provider_for_django(self.request_token_provider(server=self)), name='simple-sso-request-token'),
             url(r'^authorize/$', self.authorize_view.as_view(server=self), name='simple-sso-authorize'),

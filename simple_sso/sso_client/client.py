@@ -11,11 +11,14 @@ from django.views.generic import View
 from itsdangerous import URLSafeTimedSerializer
 from webservices.sync import SyncConsumer
 
+import logging
+logger = logging.getLogger('heroku')
 
 class LoginView(View):
     client = None
 
     def get(self, request):
+        logger.debug('PROFILING')
         next = self.get_next()
         scheme = 'https' if request.is_secure() else 'http'
         query = urllib.urlencode([('next', next)])
@@ -32,6 +35,7 @@ class LoginView(View):
         Given a request, returns the URL where a user should be redirected to
         after login. Defaults to '/'
         """
+        logger.debug('PROFILING')
         next = self.request.GET.get('next', None)
         if not next:
             return '/'
@@ -48,6 +52,7 @@ class AuthenticateView(LoginView):
     client = None
 
     def get(self, request):
+        logger.debug('PROFILING')
         raw_access_token = request.GET['access_token']
         access_token = URLSafeTimedSerializer(self.client.private_key).loads(raw_access_token)
         user = self.client.get_user(access_token)
@@ -65,6 +70,7 @@ class Client(object):
 
     def __init__(self, server_url, public_key, private_key,
                  user_extra_data=None):
+        logger.debug('PROFILING')
         self.server_url = server_url
         self.public_key = public_key
         self.private_key = private_key
@@ -74,6 +80,7 @@ class Client(object):
 
     @classmethod
     def from_dsn(cls, dsn):
+        logger.debug('PROFILING')
         parse_result = urlparse.urlparse(dsn)
         public_key = parse_result.username
         private_key = parse_result.password
@@ -84,9 +91,11 @@ class Client(object):
         return cls(server_url, public_key, private_key)
 
     def get_request_token(self, redirect_to):
+        logger.debug('PROFILING')
         return self.consumer.consume('/request-token/', {'redirect_to': redirect_to})['request_token']
 
     def get_user(self, access_token):
+        logger.debug('PROFILING')
         data = {'access_token': access_token}
         if self.user_extra_data:
             data['extra_data'] = self.user_extra_data
@@ -95,6 +104,7 @@ class Client(object):
         return user
 
     def build_user(self, user_data):
+        logger.debug('PROFILING')
         try:
             user = User.objects.get(username=user_data['username'])
         except User.DoesNotExist:
@@ -104,6 +114,7 @@ class Client(object):
         return user
 
     def get_urls(self):
+        logger.debug('PROFILING')
         return patterns('',
             url(r'^$', self.login_view.as_view(client=self), name='simple-sso-login'),
             url(r'^authenticate/$', self.authenticate_view.as_view(client=self), name='simple-sso-authenticate'),
